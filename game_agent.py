@@ -3,11 +3,28 @@ test your agent's strength against a set of known agents using tournament.py
 and include the results in your report.
 """
 import random
-
+import math
 
 class SearchTimeout(Exception):
     """Subclass base exception for code clarity. """
     pass
+
+def centrality(game, move):
+    x, y = move
+    cx, cy = (math.ceil(game.width / 2), math.ceil(game.height / 2))
+    return (game.width - cx) ** 2 + (game.height - cy) ** 2 - (x - cx) ** 2 - (y - cy) ** 2
+
+def common_moves(game, player):
+    pmoves = game.get_legal_moves()
+    omoves = game.get_legal_moves(game.get_opponent(player))
+    cmoves = pmoves and omoves
+    return 8 - len(cmoves)
+
+def interfering_moves(game, player):
+    cmoves = game.get_legal_moves() and game.get_legal_moves(game.get_opponent(player))
+    if not cmoves:
+        return 0
+    return max(centrality(game, m) for m in cmoves)
 
 
 def custom_score(game, player):
@@ -35,10 +52,12 @@ def custom_score(game, player):
         The heuristic value of the current game state to the specified player.
     """
     if game.is_winner(player) or game.is_loser(player):
-        return game.utility(player)
+        return game.utility(player) 
+    moves = len(game.get_legal_moves())
+    opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
 
-    return float(len(game.get_legal_moves(player)))
-
+    return float(moves - opp_moves + centrality(game, game.get_player_location(player)))
+    
 
 def custom_score_2(game, player):
     """Calculate the heuristic value of a game state from the point of view
@@ -64,7 +83,14 @@ def custom_score_2(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    return float(len(game.get_legal_moves(player)) / len(game.get_legal_moves(game.get_opponent(player))))
+    opp = game.get_opponent(player)
+    opp_moves = game.get_legal_moves(opp)
+    p_moves = game.get_legal_moves()
+    if not opp_moves:
+        return float("inf")
+    if not p_moves:
+        return float("-inf")
+    return float(len(p_moves) - len(opp_moves) + sum(centrality(game, m) for m in p_moves) + common_moves(game, player) + interfering_moves(game, player)) 
 
 
 def custom_score_3(game, player):
@@ -89,7 +115,17 @@ def custom_score_3(game, player):
     float
         The heuristic value of the current game state to the specified player.
     """
-    return float(len(game.get_legal_moves(player)) / (len(game.get_legal_moves(player)) + len(game.get_legal_moves(game.get_opponent(player)))))
+    opp = game.get_opponent(player)
+    opp_moves = game.get_legal_moves(opp)
+    p_moves = game.get_legal_moves()
+    common_moves = opp_moves and p_moves
+    if not opp_moves:
+        return float("inf")
+    if not p_moves:
+        return float("-inf")
+    factor = 1 / (game.move_count + 1)
+    ifactor = 1 / factor
+    return float(len(common_moves) * factor + ifactor * len(game.get_legal_moves()))
 
 
 class IsolationPlayer:
@@ -343,6 +379,7 @@ class AlphaBetaPlayer(IsolationPlayer):
         """
         if self.time_left() < self.TIMER_THRESHOLD:
             raise SearchTimeout()
+               
         return self.ab(game, depth)[0]        
 
     def ab(self, game, depth, alpha=float("-inf"), beta=float("inf")):
